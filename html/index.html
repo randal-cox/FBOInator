@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FBOInator</title>
+
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- Dygraphs -->
+  <script defer src="https://unpkg.com/dygraphs@2.2.1/dist/dygraph.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/dygraphs@2.2.1/dist/dygraph.min.css"/>
+
+  <!-- App -->
+  <script defer src="scripts.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <img src="logo.png" alt="" class="logo" aria-hidden="true" />
+      <div class="title-block">
+        <h1 class="site-title">FBOInator</h1>
+        <p class="site-subtitle">by Theandra Brin &amp; Randal Cox</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <form id="controls" class="form" autocomplete="off">
+        <div class="grid-3">
+          <label class="label">
+            Base rate of homosexuality
+            <small class="muted">(1–4%)</small>
+            <div class="control">
+              <input id="baseRate" type="number" min="1" max="4" step="0.01" value="2.00" class="input short" />
+              <span class="suffix">%</span>
+            </div>
+          </label>
+
+          <label class="label">
+            Increase per older brother
+            <small class="muted">(38–48%)</small>
+            <div class="control">
+              <input id="increase" type="number" min="38" max="48" step="0.1" value="40.0" class="input short" />
+              <span class="suffix">%</span>
+            </div>
+          </label>
+
+          <div class="label">
+            <small class="muted">Max prior sons (N)</small>
+            <div class="control">
+              <input id="maxN" type="number" min="0" step="1" value="10" class="input short" aria-label="Max prior sons" />
+            </div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="resetBtn" type="button" class="btn btn-primary">Defaults</button>
+          <div class="spacer"></div>
+          <button id="pngBtn" type="button" class="btn btn-secondary" disabled>Download PNG</button>
+          <button id="svgBtn" type="button" class="btn btn-secondary" disabled>Download SVG</button>
+          <button id="csvBtn" type="button" class="btn btn-secondary" disabled>Download CSV</button>
+        </div>
+      </form>
+
+      <div class="qr-wrap">
+        <div id="chart" class="qr-box"></div>
+      </div>
+
+      <div class="series-toggles">
+        <label><input type="checkbox" id="vis-this" checked> P[this son is gay]</label>
+        <label><input type="checkbox" id="vis-any"  checked> P[≥1 gay son up to n]</label>
+        <label><input type="checkbox" id="vis-exp"  checked> Expected fraction</label>
+      </div>
+
+      <p class="hint">
+        Drag on the plot to zoom. Shift-drag to pan. Double-click to reset zoom.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <p>
+        Read the explainer: <a href="http://sexeggheads.com/index.php?view=article&id=19:fraternal-birth-order-effect&catid=14">SEH article</a> ·
+        Source code: <a href="https://github.com/sexeggheads/fboinator">GitHub</a> ·
+        Canonical tool: <a href="/tools/fboinator">/tools/fboinator</a>
+      </p>
+    </div>
+  </footer>
+</body>
+</html>
