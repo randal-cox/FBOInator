@@ -98,3 +98,91 @@ code{font-family:var(--mono)}
   font-weight:600;
 }
 .series-toggles input{ transform:translateY(1px); }
+
+.series-toggles{
+  display:flex; gap:18px; flex-wrap:wrap; align-items:center; justify-content:center;
+  margin:10px 0 2px; color:var(--text);
+}
+.series-toggles label{ display:flex; align-items:center; gap:8px; font-weight:600; }
+.series-toggles input{ transform:translateY(1px); }
+
+.annot-controls{
+  display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center;
+  margin:8px 0 4px;
+}
+.annot-toggle{ display:flex; align-items:center; gap:8px; font-weight:600; color:var(--text); }
+
+/* Dygraphs annotation: make it look like centered text with a tiny tick, no box */
+/* Draw annotation text inline, no box, no wrap */
+/* NEW: frame around the chart; safe place for padding/border/bg */
+.chart-frame{
+  width:100%;
+  background:#fff;
+  border:1px dashed var(--border);
+  border-radius:var(--radius-sm);
+  overflow:visible;          /* allow xlabel to show */
+  padding:8px 8px 56px;      /* bottom room for x-axis label */
+  position:relative;
+}
+
+/* The actual Dygraphs container: NO padding/border/background */
+#chart{
+  width:100%;
+  height:460px;              /* own the height here */
+}
+
+/* Keep labels/legend black */
+#chart .dygraph-axis-label,
+#chart .dygraph-legend,
+#chart .dygraph-title,
+#chart .dygraph-xlabel,
+#chart .dygraph-ylabel { color:#000 !important; }
+
+.annot-controls{
+  display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start; justify-content:center;
+  margin:10px 0 4px;
+}
+.annot-toggle{ display:flex; align-items:center; gap:8px; font-weight:600; color:var(--text); }
+.annot-text{
+  min-width:320px; max-width:520px; width:100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  line-height:1.35;
+}
+.dygraph-legend {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+    right: auto !important;
+  text-align: left !important;
+}
+
+/* Make the frame a positioning context (you likely already have this) */
+.chart-frame {
+  position: relative;        /* anchor for absolute legend */
+  background:#fff;
+  border:1px dashed var(--border);
+  border-radius:var(--radius-sm);
+  overflow:visible;
+  padding:8px 8px 56px;      /* space for x-label */
+}
+
+/* Dygraphs container: no padding/border (prevents warnings) */
+#chart { width:100%; height:460px; }
+
+/* Our legend element (Dygraphs writes into it) */
+#legend {
+  position: absolute;
+  top: 10px;         /* still near the top */
+  left: 70px;        /* nudges it in from the y-axis */
+  background: none;  /* remove white background */
+  border: none;
+  font-size: 12px;
+  z-index: 10;
+}
+/* If Dygraphs sets its own class/styles, keep them in line */
+#legend.dygraph-legend {
+  background:none !important;
+  border:none !important;
+  box-shadow:none !important;
+  text-align:left !important;
+}

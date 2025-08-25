@@ -15,6 +15,14 @@ const visThis = document.getElementById('vis-this');
 const visAny  = document.getElementById('vis-any');
 const visExp  = document.getElementById('vis-exp');
 
+// Annotation controls
+const annEnableEl = document.getElementById('ann-enable');
+const annListEl   = document.getElementById('ann-list');
+
+// Persisted annotation state
+let annState = { enabled: false, list: [] }; // list: [{n: Number, name: String}]
+
+
 // ===== State =====
 let g;                    // single Dygraph instance
 let lastData = [];        // rows for export
@@ -27,33 +35,51 @@ function clamp01(x){ return Math.max(0, Math.min(0.999, x)); }
 // Single multiplicative model: p_n = base * (1 + inc)^n
 function computeData() {
   const basePct = parseFloat(baseEl.value);   // e.g., 2.00
-  const incPct  = parseFloat(incEl.value);    // e.g., 40.0
+  const incPct  = parseFloat(incEl.value);    // e.g., 40.0  => OR = 1 + 0.40
   const N       = Math.max(0, Math.round(parseInt(maxNEl.value,10)));
 
-  const base = basePct / 100.0; // 0.02
-  const inc  = incPct  / 100.0; // 0.40
+  const p0    = basePct / 100.0;          // 0.02
+  const OR    = 1 + (incPct / 100.0);     // 1.40
+  const odds0 = p0 / (1 - p0);
 
   const rows = [];
   let cumNot = 1.0;
   let sumP   = 0.0;
 
   for (let n = 0; n <= N; n++) {
-    let p = base * Math.pow(1 + inc, n);
-    p = clamp01(p);
+    const odds_n = odds0 * Math.pow(OR, n);
+    let p = odds_n / (1 + odds_n);
+
+    // cap defensively (shouldn’t hit 1.0 unless inputs extreme)
+    p = Math.min(Math.max(p, 0), 0.999);
 
     sumP += p;
     cumNot *= (1 - p);
-    const cum = clamp01(1 - cumNot);
+    const cum = 1 - cumNot;
     const expectedFrac = sumP / (n + 1);
 
-    rows.push([
-      n,
-      p * 100,            // P[this son is gay] %
-      cum * 100,          // P[≥1 gay son up to n] %
-      expectedFrac * 100  // Expected fraction %
-    ]);
+    rows.push([ n, p * 100, cum * 100, expectedFrac * 100 ]);
   }
   return rows;
+}
+
+function parseAnnotationList(text) {
+  const out = [];
+  if (!text) return out;
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) continue;
+    const idx = t.indexOf(',');
+    if (idx === -1) continue;
+    const nStr = t.slice(0, idx).trim();
+    const label = t.slice(idx + 1).trim();
+    if (!label) continue;
+    const n = parseInt(nStr, 10);
+    if (!Number.isFinite(n) || n < 0) continue;
+    out.push({ n, name: label });
+  }
+  return out;
 }
 
 // ===== Render =====
@@ -79,11 +105,14 @@ function draw() {
     strokeWidth: 2,
     highlightCircleSize: 3,
     gridLineColor: "rgba(0,0,0,0.08)",
-    valueRange: [0, 101],
+    valueRange: [0, 105],
     // Extra room for labels (container CSS also provides padding)
     xLabelHeight: 18,
     yLabelWidth: 18,
-
+    underlayCallback: function(ctx, area, gref) {
+      drawAnnotationOverlay(ctx, gref);
+    },
+    labelsDiv: document.getElementById('legend'),
     axes: {
       y: {
         // Force ticks at 0, 20, 40, 60, 80, 100 (with % labels)
@@ -104,15 +133,60 @@ function draw() {
 
   });
 
-  // Reapply series visibility after (re)draw
+  // Reapply series visibility
   seriesVisibility.forEach((vis, idx) => g.setVisibility(idx, vis));
 
   const enabled = data.length > 0;
   pngBtn.disabled = !enabled;
   svgBtn.disabled = !enabled;
   csvBtn.disabled = !enabled;
+
+
+
 }
 
+function drawAnnotationOverlay(ctx, g) {
+  if (!annState.enabled || !annState.list || !annState.list.length) return;
+  if (!lastData.length) return;
+
+  // quick index for lookup by n
+  const rowByN = new Map(lastData.map(r => [r[0], r]));
+
+  // if multiple labels share the same n, stagger them vertically
+  const counts = new Map(); // n -> count so far
+
+  ctx.save();
+  const seriesColor = g.getColors()[0] || '#000';
+  ctx.strokeStyle = seriesColor;
+  ctx.fillStyle   = '#000';
+  ctx.textAlign   = 'center';
+  ctx.textBaseline= 'bottom';
+  ctx.font        = '700 12px ' + (getComputedStyle(document.body).fontFamily || 'sans-serif');
+
+  for (const { n, name } of annState.list) {
+    const row = rowByN.get(n);
+    if (!row) continue;
+    const yPercent = row[1]; // P[this son is gay] %
+    const [xpx, ypx] = g.toDomCoords(n, yPercent);
+
+    // vertical staggering if multiple on same n
+    const k = (counts.get(n) || 0);
+    counts.set(n, k + 1);
+    const bump = k * 14; // 14px spacing per stacked label
+
+    // tick
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(xpx, ypx - 8);
+    ctx.lineTo(xpx, ypx + 8);
+    ctx.stroke();
+
+    // name (centered)
+    ctx.fillText(name, xpx, ypx - 10 - bump);
+  }
+
+  ctx.restore();
+}
 // ===== Controls =====
 function resetDefaults() {
   baseEl.value = 2.00;
@@ -152,32 +226,52 @@ function buildSVG() {
   const ys3 = lastData.map(r => r[3]);
 
   const xMin = Math.min(...xs), xMax = Math.max(...xs);
-  const yMax = Math.max(100, Math.ceil(Math.max(...ys1, ...ys2, ...ys3)));
-  const yMin = 0;
+  const yMax = 100, yMin = 0;  // fixed 0–100%
 
   const xScale = x => padL + (plotW * (x - xMin)) / (xMax - xMin || 1);
   const yScale = y => padT + plotH - (plotH * (y - yMin)) / (yMax - yMin || 1);
   const poly = arr => arr.map(([x,y]) => `${xScale(x)},${yScale(y)}`).join(' ');
 
-  // grid + tick labels
+  // grid + ticks at 0,20,40,60,80,100
   const parts = [];
-  const yTicks = 5;
-  for (let i=0;i<=yTicks;i++){
-    const y = yMin + (i*(yMax - yMin)/yTicks);
-    const yPix = yScale(y);
-    parts.push(`<line x1="${padL}" y1="${yPix}" x2="${W-padR}" y2="${yPix}" stroke="rgba(0,0,0,0.2)" stroke-width="1"/>`);
-    parts.push(`<text x="${padL-10}" y="${yPix+4}" text-anchor="end" font-size="12" fill="#000">${Math.round(y)}%</text>`);
+  for (let v = 0; v <= 100; v += 20){
+    const y = yScale(v);
+    parts.push(`<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="rgba(0,0,0,0.2)" stroke-width="1"/>`);
+    parts.push(`<text x="${padL-10}" y="${y+4}" text-anchor="end" font-size="12" fill="#000">${v}%</text>`);
   }
   for (let x=xMin; x<=xMax; x++){
-    const xPix = xScale(x);
-    parts.push(`<line x1="${xPix}" y1="${padT}" x2="${xPix}" y2="${H-padB}" stroke="rgba(0,0,0,0.12)" stroke-width="1"/>`);
-    parts.push(`<text x="${xPix}" y="${H-padB+24}" text-anchor="middle" font-size="12" fill="#000">${x}</text>`);
+    const xp = xScale(x);
+    parts.push(`<line x1="${xp}" y1="${padT}" x2="${xp}" y2="${H-padB}" stroke="rgba(0,0,0,0.12)" stroke-width="1"/>`);
+    parts.push(`<text x="${xp}" y="${H-padB+24}" text-anchor="middle" font-size="12" fill="#000">${x}</text>`);
   }
 
   const path1 = poly(lastData.map(r => [r[0], r[1]]));
   const path2 = poly(lastData.map(r => [r[0], r[2]]));
   const path3 = poly(lastData.map(r => [r[0], r[3]]));
 
+  // Annotations in SVG export (ticks + names)
+  let annotSVG = '';
+  if (annState && annState.enabled && annState.list && annState.list.length) {
+    // map rows by n
+    const rowByN = new Map(lastData.map(r => [r[0], r]));
+    const counts = new Map();
+
+    for (const { n, name } of annState.list) {
+      const row = rowByN.get(n);
+      if (!row) continue;
+      const x = xScale(n);
+      const y = yScale(row[1]); // marginal line (col 1)
+
+      const k = (counts.get(n) || 0);
+      counts.set(n, k + 1);
+      const bump = k * 14;
+
+      annotSVG += `
+        <line x1="${x}" y1="${y-8}" x2="${x}" y2="${y+8}" stroke="#4aa3ff" stroke-width="2"/>
+        <text x="${x}" y="${y-10 - bump}" text-anchor="middle" font-size="12" font-weight="700" fill="#000">${name}</text>
+      `;
+    }
+  }
   return `
 <svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
   <rect width="100%" height="100%" fill="#ffffff"/>
@@ -188,6 +282,8 @@ function buildSVG() {
   <polyline fill="none" stroke="#4aa3ff" stroke-width="2.2" points="${path1}"/>
   <polyline fill="none" stroke="#23c55e" stroke-width="2.2" points="${path2}"/>
   <polyline fill="none" stroke="#ff6b6b" stroke-width="2.2" points="${path3}"/>
+
+  ${annotSVG}
 
   <text x="${W/2}" y="${H-18}" text-anchor="middle" font-size="12" fill="#000">Number of prior sons (n)</text>
   <text transform="translate(16, ${H/2}) rotate(-90)" text-anchor="middle" font-size="12" fill="#000">Probability (%)</text>
@@ -203,38 +299,45 @@ function buildSVG() {
 }
 
 function downloadSVG() {
-  const svg = buildSVG();
-  if (!svg) return;
-  const blob = new Blob([svg], {type: "image/svg+xml;charset=utf-8"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'fboinator.svg'; a.click();
-  URL.revokeObjectURL(url);
+  try {
+    const svg = buildSVG();
+    if (!svg) return;
+    const blob = new Blob([svg], {type: "image/svg+xml;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'fboinator.svg'; a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error('SVG export failed:', e);
+  }
 }
 
 function downloadPNG() {
-  const svg = buildSVG();
-  if (!svg) return;
-
-  const blob = new Blob([svg], {type: "image/svg+xml;charset=utf-8"});
-  const url = URL.createObjectURL(blob);
-  const img = new Image();
-  img.onload = () => {
-    const W = img.width, H = img.height;
-    const canvas = document.createElement('canvas');
-    canvas.width = W; canvas.height = H;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0,0,W,H);
-    ctx.drawImage(img, 0, 0);
-    URL.revokeObjectURL(url);
-    const a = document.createElement('a');
-    a.download = 'fboinator.png';
-    a.href = canvas.toDataURL('image/png');
-    a.click();
-  };
-  img.onerror = () => URL.revokeObjectURL(url);
-  img.src = url;
+  try {
+    const svg = buildSVG();
+    if (!svg) return;
+    const blob = new Blob([svg], {type: "image/svg+xml;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      const W = img.width, H = img.height;
+      const canvas = document.createElement('canvas');
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0,0,W,H);
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      const a = document.createElement('a');
+      a.download = 'fboinator.png';
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    };
+    img.onerror = () => URL.revokeObjectURL(url);
+    img.src = url;
+  } catch (e) {
+    console.error('PNG export failed:', e);
+  }
 }
 
 function downloadCSV() {
@@ -250,25 +353,50 @@ function downloadCSV() {
 }
 
 // ===== Init =====
+// keep bindVisibility at top-level (as defined earlier)
+function bindVisibility() {
+  function attach(box, idx) {
+    box.addEventListener('change', () => {
+      seriesVisibility[idx] = box.checked;
+      if (g) g.setVisibility(idx, box.checked);
+    });
+  }
+  attach(visThis, 0);
+  attach(visAny,  1);
+  attach(visExp,  2);
+}
+
+// One and only one init
+// One and only one init
 window.addEventListener('DOMContentLoaded', () => {
-  // initialize checkbox UI to current state
+  // 1) Series toggles
   visThis.checked = seriesVisibility[0];
   visAny.checked  = seriesVisibility[1];
   visExp.checked  = seriesVisibility[2];
+  bindVisibility();
 
-  // bind checkbox handlers
-  (function bindVisibility(){
-    function attach(box, idx) {
-      box.addEventListener('change', () => {
-        seriesVisibility[idx] = box.checked;
-        if (g) g.setVisibility(idx, box.checked);
-      });
-    }
-    attach(visThis, 0);
-    attach(visAny,  1);
-    attach(visExp,  2);
-  })();
+  // 2) Annotation controls
+  function updateAnnotationState() {
+    annState.enabled = !!annEnableEl.checked;
+    annState.list    = parseAnnotationList(annListEl.value);
+    draw();
+  }
+  annEnableEl.addEventListener('change', updateAnnotationState);
+  annListEl.addEventListener('input', updateAnnotationState);
 
-  // draw first chart
+  // Optional: preload some examples
+  // annEnableEl.checked = true;
+  // annListEl.value = "7,Uncle Bill\n12,Duggar\n30,Russian woman";
+
+  // Initialize from current UI
+  annState.enabled = !!annEnableEl.checked;
+  annState.list    = parseAnnotationList(annListEl.value);
+
+  // 3) Export buttons
+  pngBtn.addEventListener('click', downloadPNG);
+  svgBtn.addEventListener('click', downloadSVG);
+  csvBtn.addEventListener('click', downloadCSV);
+
+  // 4) Draw
   draw();
 });

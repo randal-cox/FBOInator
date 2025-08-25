@@ -39,7 +39,7 @@
           </label>
 
           <label class="label">
-            Increase per older brother
+            Odds increase per older brother
             <small class="muted">(38–48%)</small>
             <div class="control">
               <input id="increase" type="number" min="38" max="48" step="0.1" value="40.0" class="input short" />
@@ -65,13 +65,31 @@
       </form>
 
       <div class="qr-wrap">
-        <div id="chart" class="qr-box"></div>
+        <div class="chart-frame">
+          <div id="chart"></div>
+          <div id="legend"></div> <!-- keep this separate, not nested inside chart -->
+        </div>
       </div>
 
       <div class="series-toggles">
         <label><input type="checkbox" id="vis-this" checked> P[this son is gay]</label>
         <label><input type="checkbox" id="vis-any"  checked> P[≥1 gay son up to n]</label>
         <label><input type="checkbox" id="vis-exp"  checked> Expected fraction</label>
+      </div>
+
+      <div class="annot-controls">
+        <label class="annot-toggle">
+          <input type="checkbox" id="ann-enable" />
+          Show annotations
+        </label>
+        <textarea id="ann-list" rows="3" class="input annot-text"
+          placeholder="n,label per line
+7,Uncle Bill
+12,Duggar
+30,Russian Family">7,Uncle Bill
+12,Duggar
+30,Russian Family</textarea>
+        <small class="muted">Format: n,label • one per line • n = number of older brothers</small>
       </div>
 
       <p class="hint">
